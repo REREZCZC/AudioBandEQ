@@ -357,6 +357,7 @@ OSStatus REAUGraphaddNode(OSType inComponentType, OSType inComponentSubType, AUG
     
     //number of file to play
     UInt16 fileCount = 2;
+    //set file bus number to 0 and 1 on mixer unit.
     for (UInt16 busNumber = 0; busNumber < fileCount; ++busNumber) {
         //set input render callback
         AURenderCallbackStruct inputCallbackStruct;
@@ -440,16 +441,41 @@ OSStatus REAUGraphaddNode(OSType inComponentType, OSType inComponentSubType, AUG
     memset(&eqEffectForamt, 0, sizeof(eqEffectForamt));
     result = AudioUnitGetProperty(eqUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &eqEffectForamt, &eqASBDSize);
     CheckError(result, "get eq unit format failed");
-    //set prefer samplefor equnit.
+    //set prefer samplerate for equnit.
     eqEffectForamt.mSampleRate = self.graphSampleRate;
     NSLog(@"eq unit sampel:%f",eqEffectForamt.mSampleRate);
     
     //reset eq unit foramt
     result = AudioUnitSetProperty(eqUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &eqEffectForamt, sizeof(eqEffectForamt));
-    CheckError(result, "reset eq unit format failed");
+    CheckError(result, "reset equnit input format failed");
     
+    //If there is no equnit, set samplerate on the mixer output scope
+    result = AudioUnitSetProperty(eqUnit, kAudioUnitProperty_SampleRate, kAudioUnitScope_Output, 0, &_graphSampleRate, sizeof(_graphSampleRate));
+    CheckError(result, "set equnit output format sampelrate failed ");
+    
+    //set mixer unit output format.
+    //make sure mixer output format and equnit input format are the same
+    result = AudioUnitSetProperty(mixerUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &eqEffectForamt, sizeof(eqEffectForamt));
+    
+    CheckError(result, "set mixer output formate failed");
+    
+    [self connectAudioGraphWithNode];
 }
 
+- (void)connectAudioGraphWithNode {
+    OSStatus result = noErr;
+    
+    //connect mixerNode  to eqNode/
+    result = AUGraphConnectNodeInput(processGraph, mixerNode, 0, nBandEqNode, 0);
+    CheckError(result, "connect mixer and eq failed");
+    
+    //connect eqNode to ioNode
+    result = AUGraphConnectNodeInput(processGraph, nBandEqNode, 0, iONode, 0);
+    CheckError(result, "connect eq and io failed");
+    
+    
+    
+}
 
 - (void)setupAudioGraph {
     OSStatus result = noErr;
@@ -469,10 +495,10 @@ OSStatus REAUGraphaddNode(OSType inComponentType, OSType inComponentSubType, AUG
     iOUnitDescription.componentFlagsMask = 0;
     
     //File Player unit
-    AudioComponentDescription filePlayerUnitDescription;
-    filePlayerUnitDescription.componentType = kAudioUnitType_Generator;
-    filePlayerUnitDescription.componentSubType = kAudioUnitSubType_AudioFilePlayer;
-    filePlayerUnitDescription.componentManufacturer = kAudioUnitManufacturer_Apple;
+//    AudioComponentDescription filePlayerUnitDescription;
+//    filePlayerUnitDescription.componentType = kAudioUnitType_Generator;
+//    filePlayerUnitDescription.componentSubType = kAudioUnitSubType_AudioFilePlayer;
+//    filePlayerUnitDescription.componentManufacturer = kAudioUnitManufacturer_Apple;
     
     //MultiChannel mixer unit
     AudioComponentDescription mixerUnitDescription;
@@ -509,9 +535,9 @@ OSStatus REAUGraphaddNode(OSType inComponentType, OSType inComponentSubType, AUG
     CheckError(result, "add nBandEQ to graph");
     
     //file player node
-    result = AUGraphAddNode(processGraph,
-                            &filePlayerUnitDescription,
-                            &filePlayerNode);
+//    result = AUGraphAddNode(processGraph,
+//                            &filePlayerUnitDescription,
+//                            &filePlayerNode);
     
     CheckError(result, "add filePlayer to graph");
 }
